@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Family board</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<meta name="theme-color" content="#1b2430">
+<style>
+:root{--bg:#1b2430;--panel:#243142;--line:#34465c;--text:#eef2f6;--dim:#9fb0c3;--done:#6f8196}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--text);font:400 1.15rem/1.35 "Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;user-select:none;-webkit-tap-highlight-color:transparent}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer}
+input,select{user-select:text}
+.app{display:grid;grid-template-columns:minmax(300px,36%) 1fr;height:100%}
+.side{display:flex;flex-direction:column;gap:14px;padding:22px;border-right:1px solid var(--line);min-height:0}
+.clock{font:300 clamp(3.5rem,9vw,6.5rem)/1 "Segoe UI Variable Display","Segoe UI",system-ui,sans-serif;letter-spacing:-.03em}
+.date{color:var(--dim);font-size:1.3rem;margin-top:-6px}
+#cal{flex:1;min-height:0;border-radius:10px;overflow:hidden;background:var(--panel)}
+#cal iframe{width:100%;height:100%;border:0;background:#fff}
+.hint{padding:16px;color:var(--dim);margin:0}
+.tools{display:flex;gap:8px;flex-wrap:wrap}
+.btn{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 16px;min-height:44px}
+.btn.on{background:var(--text);color:var(--bg)}
+.tools input[type=url]{flex:1 1 100%}
+.boards{overflow:auto;padding:22px;display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:18px;align-content:start}
+.board{background:var(--panel);border-radius:12px;border-top:6px solid var(--c);padding:14px 14px 10px}
+.board h2{margin:0 0 8px;font-size:1.4rem;font-weight:600;display:flex;justify-content:space-between;align-items:baseline}
+.board h2 small{color:var(--dim);font-weight:400;font-size:1rem}
+.item{display:flex;gap:14px;align-items:center;width:100%;min-height:58px;padding:8px 6px;background:none;border:0;border-top:1px solid var(--line);text-align:left}
+.box{flex:none;width:30px;height:30px;border-radius:50%;border:3px solid var(--c);display:grid;place-items:center;font-weight:700;color:var(--bg)}
+.done .box{background:var(--c)}
+.done .box::after{content:"✓"}
+.done span:last-child{color:var(--done);text-decoration:line-through}
+.row{display:flex;gap:8px;margin-top:8px}
+.row input,.t,select,.tools input{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px 12px;min-height:44px}
+.row input{flex:1;min-width:0}
+.t{width:100%;font-weight:600;font-size:1.3rem}
+select{margin-top:8px;width:100%}
+.link{background:none;border:0;color:var(--dim);text-decoration:underline;padding:12px 0 6px}
+.new{min-height:120px;background:none;border:2px dashed var(--line);border-radius:12px;color:var(--dim)}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="side">
+    <div><div class="clock" id="clock"></div><div class="date" id="date"></div></div>
+    <div id="cal"></div>
+    <div class="tools" id="tools"></div>
+  </aside>
+  <main class="boards" id="boards"></main>
+</div>
+<script>
+var KEY='familyboard.v1',COLORS=['#3fb8af','#f2b441','#b58cff','#5aa9ff','#ff8a8a','#8bd36b'];
+var editing=false,state=load();
+function $(s){return document.querySelector(s)}
+function uid(){return Math.random().toString(36).slice(2,9)}
+function h(t,p){var e=document.createElement(t);p=p||{};for(var a in p){var v=p[a];if(a==='class')e.className=v;else if(a==='style')e.style.cssText=v;else if(a.indexOf('on')===0)e.addEventListener(a.slice(2),v);else e[a]=v}
+  for(var i=2;i<arguments.length;i++)[].concat(arguments[i]).forEach(function(c){e.append(c)});return e}
+function ymd(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
+function period(r){var d=new Date();if(r==='weekly')d.setDate(d.getDate()-d.getDay());return ymd(d)}
+function board(t,r,items){return{id:uid(),title:t,reset:r,last:'',items:items.map(function(x){return{id:uid(),text:x,done:false}})}}
+function seed(){return{cal:'',boards:[
+  board('Kid 1 chores','daily',['Make bed','Brush teeth','Tidy room']),
+  board('Kid 2 chores','daily',['Make bed','Brush teeth','Feed the pet']),
+  board('Daily tasks','daily',['Pack lunches']),
+  board('Weekly tasks','weekly',['Take out the trash','Laundry'])]}}
+function load(){try{var s=JSON.parse(localStorage.getItem(KEY));if(s&&s.boards)return s}catch(e){}return seed()}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(state))}catch(e){}}
+function resets(){var ch=false;state.boards.forEach(function(b){if(b.reset==='none')return;var p=period(b.reset);
+  if(b.last!==p){if(b.last)b.items.forEach(function(i){i.done=false});b.last=p;ch=true}});if(ch){save();render()}}
+function tick(){var n=new Date();$('#clock').textContent=n.toLocaleTimeString([],{hour:'numeric',minute:'2-digit'});
+  $('#date').textContent=n.toLocaleDateString([],{weekday:'long',month:'long',day:'numeric'});resets()}
+function renderCal(){var b=$('#cal');b.replaceChildren();
+  b.append(state.cal?h('iframe',{src:state.cal,title:'Family calendar'}):h('p',{class:'hint',textContent:'Tap Edit, then paste your published Outlook calendar link to show your calendar here.'}))}
+function renderTools(){var t=$('#tools');t.replaceChildren();
+  t.append(h('button',{class:'btn'+(editing?' on':''),textContent:editing?'Done':'Edit',onclick:function(){editing=!editing;render()}}));
+  if(!editing)return;
+  t.append(h('button',{class:'btn',textContent:'Back up',onclick:backup}),
+    h('button',{class:'btn',textContent:'Restore',onclick:function(){$('#file').click()}}),
+    h('input',{type:'url',placeholder:'Published calendar link',value:state.cal,onchange:function(e){state.cal=e.target.value.trim();save();renderCal()}}),
+    h('input',{id:'file',type:'file',accept:'.json',style:'display:none',onchange:restore}))}
+function backup(){var a=h('a',{href:URL.createObjectURL(new Blob([JSON.stringify(state)],{type:'application/json'})),download:'family-board-backup.json'});a.click()}
+function restore(e){var f=e.target.files[0];if(!f)return;f.text().then(function(x){var s=JSON.parse(x);
+  if(!s.boards)throw 0;state=s;save();render()}).catch(function(){alert('That file is not a family board backup.')})}
+function renderBoards(){var root=$('#boards');root.replaceChildren();
+  state.boards.forEach(function(b,bi){
+    var card=h('section',{class:'board',style:'--c:'+COLORS[bi%COLORS.length]});
+    var done=b.items.filter(function(i){return i.done}).length;
+    if(editing){
+      card.append(h('input',{class:'t',value:b.title,onchange:function(e){b.title=e.target.value;save()}}));
+      var sel=h('select',{onchange:function(e){b.reset=e.target.value;b.last='';save();resets()}});
+      [['daily','Resets every day'],['weekly','Resets every Sunday'],['none','Never resets']].forEach(function(o){
+        sel.append(h('option',{value:o[0],textContent:o[1],selected:b.reset===o[0]}))});
+      card.append(sel)}
+    else card.append(h('h2',{},b.title,h('small',{textContent:done+' of '+b.items.length})));
+    b.items.forEach(function(it){
+      if(editing)card.append(h('div',{class:'row'},
+        h('input',{value:it.text,onchange:function(e){it.text=e.target.value;save()}}),
+        h('button',{class:'btn',title:'Delete',textContent:'✕',onclick:function(){b.items=b.items.filter(function(x){return x!==it});save();render()}})));
+      else card.append(h('button',{class:'item'+(it.done?' done':''),onclick:function(){it.done=!it.done;save();render()}},
+        h('span',{class:'box'}),h('span',{textContent:it.text})))});
+    if(editing){
+      var inp=h('input',{placeholder:'New item'});
+      var add=function(){var v=inp.value.trim();if(!v)return;b.items.push({id:uid(),text:v,done:false});save();render()};
+      inp.addEventListener('keydown',function(e){if(e.key==='Enter')add()});
+      card.append(h('div',{class:'row'},inp,h('button',{class:'btn',textContent:'Add',onclick:add})),
+        h('button',{class:'link',textContent:'Delete this board',onclick:function(){
+          if(confirm('Delete the board '+b.title+'?')){state.boards.splice(bi,1);save();render()}}}))}
+    root.append(card)});
+  if(editing)root.append(h('button',{class:'new',textContent:'Add a board',onclick:function(){
+    state.boards.push(board('New board','daily',[]));state.boards[state.boards.length-1].last=period('daily');save();render()}}))}
+function render(){renderTools();renderBoards()}
+renderCal();render();tick();setInterval(tick,30000);
+if(navigator.storage&&navigator.storage.persist)navigator.storage.persist();
+if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(function(){});
+</script>
+</body>
+</html>
